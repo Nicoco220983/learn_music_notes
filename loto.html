@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>LOTO</title>
+        <style>
+            html, body {
+                height: 100%;
+            }
+            body, flexcol, flexrow {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            body, flexcol {
+                flex-direction: column;
+            }
+            flexrow {
+                flex-direction: row;
+            }
+            #drawned_number {
+                font-size: 100px;
+                font-weight: bold;
+            }
+            #all_drawned_numbers span {
+                display: inline-flex;
+                color: grey;
+                padding: .5em;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="drawned_number">--</div>
+        <div id="all_drawned_numbers" class="flexrow" style="flex-wrap: wrap"></div>
+        <script>
+            const ordered_numbers = [], numbers = [], drawned_numbers = []
+            for(let i=1; i<=90; ++i) ordered_numbers.push(i)
+            while(ordered_numbers.length > 0) {
+                const idx = Math.floor(Math.random() * ordered_numbers.length)
+                numbers.push(ordered_numbers.splice(idx, 1)[0])
+            }
+            let current_idx = 0
+            document.body.onclick = () => {
+                if(current_idx >= numbers.length) return
+                const drawned_number = numbers[current_idx]
+                document.getElementById("drawned_number").textContent = drawned_number
+                drawned_numbers.push(drawned_number)
+                drawned_numbers.sort((a, b) => a - b)
+                document.getElementById("all_drawned_numbers").innerHTML = ""
+                for(let i=0; i<drawned_numbers.length; ++i) {
+                    const el = document.createElement("span")
+                    el.textContent = drawned_numbers[i]
+                    document.getElementById("all_drawned_numbers").appendChild(el)
+                }
+                current_idx += 1
+            }
+        </script>
+    </body>
+</html>
