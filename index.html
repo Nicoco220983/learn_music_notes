@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8"> 
+        <meta name="viewport" content="width=device-height, initial-scale=1.0">
+        <title>Learn Music Notes</title>
+        <style>
+            html, body {
+                height: 100%;
+                padding: 0;
+                margin: 0;
+                background: white;
+            }
+            body, flexcol, flexrow {
+                display: flex;
+                align-items: center;
+                justify-content: space-around;
+            }
+            body, flexcol {
+                flex-direction: column;
+            }
+            flexrow {
+                flex-direction: row;
+            }
+            /* #buttons input[type=image] {
+                width: 50px;
+                height: 50px;
+                outline: 1px solid lightgrey;
+                border-radius: 5px;
+                cursor: pointer;
+                background: white;
+            }
+            #buttons input[type=image]:active {
+                background: lightgrey;
+            } */
+        </style>
+    </head>
+    <body style="justify-content: space-between">
+        <flexcol id="menu" style="display: none; gap: .5em">
+            <h1>Apprendre les notes de musique</h1>
+            <div>
+                <h2>Facile</h2>
+                <button onclick="initGame(60, ['3-c', '3-d', '3-e'])">Do Ré Mi</button>
+                <button onclick="initGame(60, ['3-g', '3-a', '3-b'])">Sol La Si</button>
+                <button onclick="initGame(60, ['3-c', '3-e', '3-g', '3-b'])">Do Mi Sol Si</button>
+                <button onclick="initGame(60, ['3-d', '3-d', '3-a'])">Ré Fa La</button>
+                <h2>Moyen</h2>
+                <button onclick="initGame(60, ['3-c', '3-d', '3-e', '3-f', '3-g', '3-a', '3-b'])">Do Ré Mi Fa Sol La Si</button>
+                <button onclick="initGame(60, ['3-f', '3-g', '3-a', '3-b', '4-c', '4-d', '4-e', '4-f'])">Fa Sol La Si / Do Ré Mi Fa</button>
+                <h2>Difficile</h2>
+                <button onclick="initGame(60, ['3-c', '3-d', '3-e', '3-f', '3-g', '3-a', '3-b', '4-c', '4-d', '4-e', '4-f', '4-g', '4-a'])">Do Ré Mi Fa Sol La Si / Do Ré Mi Fa Sol La</button>
+                <h2>Récré</h2>
+                <button onclick="showFreePlay()">Libre</button>
+            </div>
+        </flexcol>
+        <flexrow id="partition_section" style="display: none; padding: 50px; gap: 50px; flex: 1; width: calc(100% - 100px)">
+            <flexcol id="buttons" style="gap: .5em">
+                <button onclick="setFullscreen()">Fullscreen</button>
+                <button onclick="startGame()">Replay</button>
+            </flexcol>
+            <flexcol id="indicators" style="font-size: 2vw">
+                <flexrow style="gap: .5em"><span>Chrono:</span><span id="chrono" style="font-size: 2em; font-weight: bold">--</span></flexrow>
+                <flexrow style="gap: .5em"><span>Score:</span><span id="score" style="font-size: 2em; font-weight: bold">0</span></flexrow>
+            </flexcol>
+            <flexrow id="partition" style="flex: 1; height: 100%"></flexrow>
+        </flexrow>
+        <div id="keyboard" style="display: none; width: 100%; position:relative"></div>
+        <script>
+            const menuEl = document.getElementById("menu")
+            const partitionSectionEl = document.getElementById("partition_section")
+            const indicatorsEl = document.getElementById("indicators")
+            const chronoEl = document.getElementById("chrono")
+            const scoreEl = document.getElementById("score")
+            const partitionEl = document.getElementById("partition")
+            const keyboardEl = document.getElementById("keyboard")
+
+            let gameMode = false
+            let notesToPlay = [], notesToPlayIdx = null
+            let chronoTime = 0, score = 0
+            const [notesDefs, nbWhiteKeys] = initNotesDefs()
+
+            function main() {
+                createPartition()
+                createKeyboard()
+                showMenu()
+            }
+
+            function showSections(menu, partition, keyboard) {
+                menuEl.style.display = menu ? "" : "none"
+                partitionSectionEl.style.display = partition ? "" : "none"
+                keyboardEl.style.display = keyboard ? "" : "none"
+                keyboardEl.style.flex = partition ? "" : "1"
+                if(partition) partitionWrapperEl.fitMe()
+            }
+            const showMenu = () => showSections(true, false, false)
+            const showGame = () => showSections(false, true, true)
+            const showFreePlay = () => showSections(false, false, true)
+
+            function initNotesDefs() {
+                const noteMin = "3-c", noteMax = "4-b", notesDefs = {}
+                let nbWhiteKeys = 0, lastWhiteKeyboardPos = -1, partitionRefPos = null
+                let inRange = false
+                for(let range of [2, 3, 4]) for(let letter of ["c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b"]) {
+                    const note = `${range}-${letter}`
+                    if(note == noteMin) inRange = true
+                    if(!inRange) continue
+                    const isWhite = !letter.endsWith("s")
+                    notesDefs[note] = {
+                        isWhite,
+                        keyboardPos: lastWhiteKeyboardPos + (isWhite ? 1 : .5)
+                    }
+                    if(isWhite) {
+                        lastWhiteKeyboardPos = notesDefs[note].keyboardPos
+                        nbWhiteKeys += 1
+                    }
+                    if(note === "3-b") partitionRefPos = notesDefs[note].keyboardPos
+                    if(note == noteMax) break
+                }
+                for(let note in notesDefs) notesDefs[note].partitionPosY = partitionRefPos - notesDefs[note].keyboardPos
+                return [notesDefs, nbWhiteKeys]
+            }
+
+            let partitionWrapperEl = null, notesCanvasEl = null, notesCanvasCtx = null
+
+            function createPartition() {
+                const lineWidth = 500
+                const lineGap = 20
+                const height = 8 * lineGap
+
+                partitionWrapperEl = addEl(partitionEl, "div", { style: {
+                    position: "relative",
+                }})
+                fitToParentEl(partitionWrapperEl, lineWidth/height)
+                const canvasStyle = {
+                    width: "100%",
+                    height: "100%",
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                }
+                notesCanvasEl = addEl(partitionWrapperEl, "canvas", { style: {
+                    zIndex: 1,
+                    ...canvasStyle,
+                }})
+                const partitionCanvasEl = addEl(partitionWrapperEl, "canvas", { style: {
+                    zIndex: 0,
+                    ...canvasStyle,
+                }})
+                partitionCanvasEl.width = notesCanvasEl.width = lineWidth
+                partitionCanvasEl.height = notesCanvasEl.height = height
+                const ctx = partitionCanvasEl.getContext("2d")
+                notesCanvasCtx = notesCanvasEl.getContext("2d")
+
+                ctx.fillStyle = "white"
+                ctx.fillRect(0, 0, partitionCanvasEl.width, partitionCanvasEl.height)
+
+                ctx.strokeStyle = "black"
+                ctx.lineWidth = 1
+                for(let i=0; i<5; ++i) {
+                    ctx.beginPath()
+                    ctx.moveTo(0, (i+2)*lineGap)
+                    ctx.lineTo(partitionCanvasEl.width, (i+2)*lineGap)
+                    ctx.stroke()
+                }
+            }
+
+            function getPartitionCanvasPos(posX, posY) {
+                return {
+                    x: (posX + .5) * 50,
+                    y: notesCanvasEl.height/2 + posY * 10
+                }
+            }
+
+            function addPartitionNote(posX, posY) {
+                const { x, y } = getPartitionCanvasPos(posX, posY)
+                notesCanvasCtx.fillStyle = "black"
+                notesCanvasCtx.beginPath()
+                notesCanvasCtx.ellipse(x, y, 12, 10, 0, 0, 2 * Math.PI)
+                notesCanvasCtx.fill()
+                const linesPosY = []
+                for(let pos=6; pos<=posY; pos+=2) linesPosY.push(pos)
+                for(let pos=-6; pos>=posY; pos-=2) linesPosY.push(pos)
+                notesCanvasCtx.strokeStyle = "black"
+                notesCanvasCtx.lineWidth = 1
+                for(let linePosY of linesPosY) {
+                    const { y: lineY } = getPartitionCanvasPos(posX, linePosY)
+                    notesCanvasCtx.beginPath()
+                    notesCanvasCtx.moveTo(x-20, lineY)
+                    notesCanvasCtx.lineTo(x+20, lineY)
+                    notesCanvasCtx.stroke()
+                }
+            }
+
+            function addPartitionNoteIconOk(posX, posY) {
+                let { x, y } = getPartitionCanvasPos(posX, posY)
+                x += 15
+                y += 10
+                notesCanvasCtx.strokeStyle = "green"
+                notesCanvasCtx.lineWidth = 2
+                notesCanvasCtx.beginPath()
+                notesCanvasCtx.moveTo(x-5, y)
+                notesCanvasCtx.lineTo(x, y+5)
+                notesCanvasCtx.lineTo(x+5, y-5)
+                notesCanvasCtx.stroke()
+            }
+
+            function addPartitionNoteIconKo(posX, posY) {
+                let { x, y } = getPartitionCanvasPos(posX, posY)
+                x += 15 + 10 * (Math.random() - .5)
+                y += 10 + 10 * (Math.random() - .5)
+                notesCanvasCtx.strokeStyle = "red"
+                notesCanvasCtx.lineWidth = 1
+                notesCanvasCtx.beginPath()
+                notesCanvasCtx.moveTo(x-5, y-5)
+                notesCanvasCtx.lineTo(x+5, y+5)
+                notesCanvasCtx.moveTo(x+5, y-5)
+                notesCanvasCtx.lineTo(x-5, y+5)
+                notesCanvasCtx.stroke()
+            }
+
+            function createKeyboard() {
+                const whiteKeyWidth = 50
+                const whiteKeyHeight = 150
+                const blackKeyWidth = whiteKeyWidth / 2
+                const blackKeyHeight = whiteKeyHeight / 2
+
+                Object.assign(keyboardEl.style, {
+                    width: "100%",
+                    aspectRatio: `${whiteKeyWidth * nbWhiteKeys} / ${whiteKeyHeight}`
+                })
+                const canvasStyle = {
+                    width: "100%",
+                    aspectRatio: `${whiteKeyWidth * nbWhiteKeys} / ${whiteKeyHeight}`,
+                    position: "absolute",
+                    left: 0,
+                    bottom: 0,
+                }
+                const blackNotesCanvasEl = addEl(keyboardEl, "canvas", { style: {
+                    zIndex: 1,
+                    ...canvasStyle,
+                }})
+                const whiteNotesCanvasEl = addEl(keyboardEl, "canvas", { style: {
+                    zIndex: 0,
+                    ...canvasStyle,
+                }})
+                blackNotesCanvasEl.width = whiteNotesCanvasEl.width = whiteKeyWidth * nbWhiteKeys
+                blackNotesCanvasEl.height = whiteNotesCanvasEl.height = whiteKeyHeight
+                const blackCtx = blackNotesCanvasEl.getContext("2d"), whiteCtx = whiteNotesCanvasEl.getContext("2d")
+                
+                const whiteKeysPos = [], blackKeysPos = [], noteAudsPool = {}
+                for(let note in notesDefs) {
+                    const def = notesDefs[note], isWhite = def.isWhite
+                    if(isWhite) {
+                        const left = def.keyboardPos * whiteKeyWidth + 1, top = 1,  width = whiteKeyWidth-1, height = whiteKeyHeight-1
+                        whiteKeysPos.push({ left, top, width, height, note, isWhite })
+                    } else {
+                        const left = (def.keyboardPos + .25) * whiteKeyWidth, top = 0, width = blackKeyWidth, height = blackKeyHeight
+                        blackKeysPos.push({ left, top, width, height, note, isWhite })
+                    }
+                    noteAudsPool[note] = new Pool(3, () => new Audio(`assets/piano-88-notes/${note}.mp3`))
+                }
+                const keysPos = [ ...blackKeysPos, ...whiteKeysPos]
+
+                const drawKeyBoardNote = (keyPos, isDown) => {
+                    const { left, top, width, height, isWhite } = keyPos
+                    const ctx = isWhite ? whiteCtx : blackCtx
+                    ctx.fillStyle = isDown ? (isWhite ? "lightgrey" : "grey") : (isWhite ? "white" : "black")
+                    ctx.strokeStyle = "black"
+                    ctx.fillRect(left, top, width, height)
+                    ctx.strokeRect(left, top, width, height)
+                }
+                for(let i=keysPos.length-1; i>=0; i--) drawKeyBoardNote(keysPos[i], false)
+
+                let currentPressedKeys = new Set()
+                const updatePressedKeys = newPressedKeys => {
+                    if(gameMode && newPressedKeys.length>0) {
+                        if(chronoTime == 0) return
+                        startChrono()
+                    }
+                    newPressedKeys = new Set(newPressedKeys)
+                    const newKeys = [], oldKeys = []
+                    for(let key of newPressedKeys) if(!currentPressedKeys.has(key)) newKeys.push(key)
+                    for(let key of currentPressedKeys) if(!newPressedKeys.has(key)) oldKeys.push(key)
+                    for(let key of oldKeys) {
+                        drawKeyBoardNote(key, false)
+                        const aud = noteAudsPool[key.note].current()
+                        if(aud) fadeoutAud(aud, 1)
+                    }
+                    for(let key of newKeys) {
+                        drawKeyBoardNote(key, true)
+                        replayAud(noteAudsPool[key.note].next(), .5)
+                        checkNote(key.note)
+                    }
+                    currentPressedKeys = newPressedKeys
+                }
+
+                const duckAudPool = new Pool(3, () => new Audio(`assets/duck-quack.opus`))
+                const checkNote = note => {
+                    if(notesToPlayIdx === null) return
+                    const { note: noteToPlay, posX, posY } = notesToPlay[notesToPlayIdx]
+                    if(note == noteToPlay) {
+                        addPartitionNoteIconOk(posX, posY)
+                        score += 1
+                        syncScore()
+                        if(notesToPlayIdx < notesToPlay.length-1) notesToPlayIdx += 1
+                        else addNotes(gameCandidateNotes)
+                    } else {
+                        addPartitionNoteIconKo(posX, posY)
+                        score = Math.max(0, score-1)
+                        syncScore()
+                        replayAud(duckAudPool.next(), 1)
+                    }
+                }
+
+                const hasTouch = (('ontouchstart' in window) || (navigator.msMaxTouchPoints > 0))
+                const getEvtKeys = evt => {
+                    let res
+                    if(hasTouch) res = Array.from(evt.touches).map(getCursorKey)
+                    else res = [getCursorKey(evt)]
+                    return res.filter(k => k)
+                }
+                const getCursorKey = evt => {
+                    const rect = blackNotesCanvasEl.getBoundingClientRect()
+                    const cursorX = (evt.clientX - rect.left) * blackNotesCanvasEl.width / rect.width
+                    const cursorY = (evt.clientY - rect.top) * blackNotesCanvasEl.height / rect.height
+                    for(let keyPos of keysPos) {
+                        if(cursorX >= keyPos.left && cursorX <= keyPos.left + keyPos.width && cursorY >= keyPos.top && cursorY <= keyPos.top + keyPos.height) {
+                            return keyPos
+                        }
+                    }
+                }
+
+                let mouseDown = false
+                const onPointerDown = () => mouseDown = true
+                if(hasTouch) document.body.ontouchstart = onPointerDown
+                else document.body.onmousedown = onPointerDown
+                const onPointerUp = () => {
+                    mouseDown = false
+                    updatePressedKeys([])
+                }
+                if(hasTouch) document.body.ontouchend = onPointerUp
+                else document.body.onmouseup = onPointerUp
+                
+                const onPointerDownOnNote = evt => updatePressedKeys(getEvtKeys(evt))
+                if(hasTouch) blackNotesCanvasEl.ontouchstart = onPointerDownOnNote
+                else blackNotesCanvasEl.onmousedown = onPointerDownOnNote
+
+                const onPointerMove = evt => {
+                    if(!mouseDown) return
+                    updatePressedKeys(getEvtKeys(evt))
+                }
+                if(hasTouch) blackNotesCanvasEl.ontouchmove = onPointerMove
+                else blackNotesCanvasEl.onmousemove = onPointerMove
+            }
+
+            let gameDuration = null, gameCandidateNotes = null
+
+            function initGame(duration, candidateNotes) {
+                gameDuration = duration
+                gameCandidateNotes = candidateNotes
+                startGame()
+            }
+
+            function startGame() {
+                gameMode = true
+                score = 0
+                initChrono(gameDuration)
+                syncScore()
+                addNotes(gameCandidateNotes)
+                showGame()
+            }
+
+            function addNotes(candidateNotes) {
+                const nbNotes = 10
+                notesToPlay.length = notesToPlayIdx = 0
+                notesCanvasCtx.clearRect(0, 0, notesCanvasEl.width, notesCanvasEl.height)
+                for(let posX=0; posX<nbNotes; ++posX) {
+                    const note = candidateNotes[Math.floor(Math.random()*candidateNotes.length)]
+                    const { partitionPosY: posY  } = notesDefs[note]
+                    addPartitionNote(posX, posY)
+                    notesToPlay.push({ note, posX, posY })
+                }
+            }
+
+            let chronoInt = null
+
+            function initChrono(duration) {
+                stopChrono()
+                chronoTime = duration
+                syncChrono()
+            }
+
+            function startChrono() {
+                if(chronoInt) return
+                stopChrono()
+                chronoInt = setInterval(() => {
+                    chronoTime -= 1
+                    syncChrono()
+                    if(chronoTime == 0) stopChrono()
+                }, 1000)
+            }
+
+            function stopChrono() {
+                if(chronoInt) clearInterval(chronoInt)
+                chronoInt = null
+            }
+
+            function syncChrono() {
+                chronoEl.textContent = chronoTime
+            }
+
+            function syncScore() {
+                scoreEl.textContent = score
+            }
+
+            // utils
+
+            function addEl(parentEl, tag, kwargs) {
+                const el = document.createElement(tag)
+                if(kwargs && kwargs.class) el.classList.add(kwargs.class)
+                if(kwargs && kwargs.style) Object.assign(el.style, kwargs.style)
+                parentEl.appendChild(el)
+                return el
+            }
+            class Pool {
+                constructor(nbItems, itemBuilder) {
+                    this.index = -1
+                    this.items = []
+                    for(let i=0; i<nbItems; ++i) this.items.push(itemBuilder(i))
+                }
+                current() {
+                    if(this.index === -1) return null
+                    return this.items[this.index]
+                }
+                next() {
+                    this.index = (this.index + 1) % this.items.length
+                    return this.items[this.index]
+                }
+            }
+            function replayAud(aud, volume) {
+                aud.currentTime = 0
+                aud.volume = volume
+                aud.play()
+            }
+            function fadeoutAud(aud, fadeSpeed) {
+                const period = 50 // ms
+                const volStep = fadeSpeed * period / 1000
+                const int = setInterval(() => {
+                    if (aud.volume > volStep) {
+                        aud.volume -= volStep
+                    } else {
+                        aud.pause()
+                        clearInterval(int)
+                    }
+                }, period)
+            }
+            function fadeoutEl(el, fadeSpeed) {
+                const period = 50 // ms
+                const opacityStep = fadeSpeed * period / 1000
+                el.style.opacity = 1
+                const int = setInterval(() => {
+                    if (el.style.opacity > opacityStep) {
+                        el.style.opacity -= opacityStep
+                    } else {
+                        el.remove()
+                        clearInterval(int)
+                    }
+                }, period)
+            }
+            function fitToParentEl(el, aspectRatio) {
+                el.style.aspectRatio = aspectRatio
+                const _fitToParentEl = () => {
+                    el.style.width = el.style.height = null
+                    const parentEl = el.parentElement
+                    if(parentEl.offsetWidth / parentEl.offsetHeight > aspectRatio)
+                        el.style.height = "100%"
+                    else
+                        el.style.width = "100%"
+
+                }
+                _fitToParentEl()
+                window.addEventListener("resize", _fitToParentEl)
+                el.fitMe = _fitToParentEl
+            }
+            function setFullscreen() {
+                document.body.requestFullscreen()
+            }
+            // for debugging on smartphone
+            function log(txt, color) {
+                if(!window.logWrapperEl) {
+                    window.logWrapperEl = addEl(document.body, "div", { style: {
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                    }})
+                }
+                while(window.logWrapperEl.children.length >= 10)
+                    window.logWrapperEl.children[0].remove()
+                const logEl = addEl(window.logWrapperEl, "div", { style: {
+                    color: color || "grey"
+                }})
+                logEl.textContent = txt
+            }
+            main()
+        </script>
+    </body>
+</html>
